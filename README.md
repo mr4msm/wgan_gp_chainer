@@ -12,6 +12,8 @@ You can generate various images by changing the random_seed option.
 ```
 python generate_image.py config.py -p example_food-101/trained-params_gen_update-000020000.npz -r 1
 ```
+## Example
+![example_image_food-101](https://raw.githubusercontent.com/mr4msm/wgan_gp_chainer/master/example_food-101/generated_image_update-000020000.png)
 
 # Dataset
 I resized the images to 64x64 before training.
