@@ -94,8 +94,7 @@ def initialize_optimizer(optimizer, state, output_path):
 
 
 def train_wgan_gp():
-    """Train Critic and Generator using Wasserstein GAN with gradient
-    penalty."""
+    """Train Critic and Generator using Wasserstein GAN with gradient penalty."""
     # parse arguments
     args = parse_arguments()
     config = load_module(args.config)

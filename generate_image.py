@@ -4,7 +4,6 @@
 import argparse
 import chainer
 import cv2
-import imp
 import numpy as np
 import os
 import random

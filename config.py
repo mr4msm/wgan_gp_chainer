@@ -2,7 +2,7 @@
 """Critic, Generator, optimizers and hyper params definitions."""
 
 import numpy as np
-from chainer import Chain, Variable, cuda, initializers, optimizers
+from chainer import Chain, Variable, cuda, optimizers
 from chainer import functions as F
 from chainer import links as L
 
