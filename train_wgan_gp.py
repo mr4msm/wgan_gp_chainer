@@ -9,7 +9,7 @@ import os
 from chainer import Variable, cuda, serializers, using_config
 from chainer import computational_graph as graph
 from chainer import functions as F
-from data_generator import ImageBatchGenerator
+from batch_generator import ImageBatchGenerator
 from datetime import datetime as dt
 
 SAVE_PARAMS_FORMAT = 'trained-params_{0}_update-{1:09d}.npz'
@@ -129,7 +129,8 @@ def train_wgan_gp():
     batch_generator = ImageBatchGenerator(input_files, batch_size,
                                           config.HEIGHT, config.WIDTH,
                                           channel=config.CHANNEL,
-                                          shuffle=True)
+                                          shuffle=True,
+                                          flip_h=getattr(config, 'FLIP_H', False))
     sample_num = batch_generator.n_samples
 
     # show some settings
@@ -183,8 +184,7 @@ def train_wgan_gp():
                 x_t = cuda.to_gpu(x_t, device=gpu_id)
 
             z = xp.random.normal(loc=0., scale=1.,
-                                 size=(batch_size, z_vec_dim),
-                                 dtype='float32')
+                                 size=(batch_size, z_vec_dim)).astype('float32')
 
             with using_config('enable_backprop', False):
                 x_g = model_gen(z).data
@@ -197,8 +197,8 @@ def train_wgan_gp():
             differences = x_t - x_g
             alpha = xp.random.uniform(low=0., high=1.,
                                       size=((batch_size,) +
-                                            (1,) * (differences.ndim - 1)),
-                                      dtype='float32')
+                                            (1,) * (differences.ndim - 1))
+                                      ).astype('float32')
             interpolates = Variable(x_t - alpha * differences)
 
             gradients = chainer.grad([model_cri(interpolates)],
@@ -224,7 +224,7 @@ def train_wgan_gp():
             sum_loss_c += float(loss_c.data) / update_cri_per_gen
 
         z = xp.random.normal(loc=0., scale=1.,
-                             size=(batch_size, z_vec_dim), dtype='float32')
+                             size=(batch_size, z_vec_dim)).astype('float32')
         x_g = model_gen(z)
         y_g = model_cri(x_g)
         loss_g = -F.sum(y_g) / batch_size
