@@ -2,7 +2,7 @@
 """Critic, Generator, optimizers and hyper params definitions."""
 
 import numpy as np
-from chainer import Chain, Variable, cuda, optimizers
+from chainer import Chain, Variable, cuda, initializers, optimizers
 from chainer import functions as F
 from chainer import links as L
 
@@ -13,8 +13,10 @@ HEIGHT = 64
 WIDTH = 64
 CHANNEL = 3
 
+FLIP_H = True
+
 BATCH_SIZE = 64
-UPDATE_MAX = 20000
+UPDATE_MAX = 40000
 UPDATE_SAVE_PARAMS = 1000
 UPDATE_CRI_PER_GEN = 5
 
