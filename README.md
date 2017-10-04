@@ -6,18 +6,18 @@ The scripts work on Python 2.7.13.
 
 # How to generate an image
 ```
-python generate_image.py example_food-101/onfig.py -p example_food-101/trained-params_gen_update-000040000.npz
+$ python generate_image.py example_food-101/config.py -p example_food-101/trained-params_gen_update-000040000.npz
 ```
 You can generate various images by changing the random_seed option.
 ```
-python generate_image.py example_food-101/config.py -r 1 -p example_food-101/trained-params_gen_update-000040000.npz
+$ python generate_image.py example_food-101/config.py -r 1 -p example_food-101/trained-params_gen_update-000040000.npz
 ```
 
 ## Example Food-101
-<!-- ![example_image_food-101](https://raw.githubusercontent.com/mr4msm/wgan_gp_chainer/master/example_food-101/generated_image_update-000020000.png) -->
+![example_image_food-101](https://raw.githubusercontent.com/mr4msm/wgan_gp_chainer/master/example_food-101/example_update-000040000.png)
 
 ## Example Birds
-
+![example_image_birds](https://raw.githubusercontent.com/mr4msm/wgan_gp_chainer/master/example_birds/example_update-000040000.png)
 
 # Dataset
 I resized the images to 64x64 before training.
