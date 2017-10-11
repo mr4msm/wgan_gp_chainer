@@ -16,14 +16,6 @@ SAVE_PARAMS_FORMAT = 'trained-params_{0}_update-{1:09d}.npz'
 SAVE_STATE_FORMAT = 'optimizer-state_{0}_update-{1:09d}.npz'
 
 
-def load_module(module_path):
-    """Load Python module."""
-    head, tail = os.path.split(module_path)
-    module_name = os.path.splitext(tail)[0]
-    info = imp.find_module(module_name, [head])
-    return imp.load_module(module_name, *info)
-
-
 def parse_arguments():
     """Define and parse positional/optional arguments."""
     parser = argparse.ArgumentParser()
@@ -66,6 +58,14 @@ def parse_arguments():
     )
 
     return parser.parse_args()
+
+
+def load_module(module_path):
+    """Load Python module."""
+    head, tail = os.path.split(module_path)
+    module_name = os.path.splitext(tail)[0]
+    info = imp.find_module(module_name, [head])
+    return imp.load_module(module_name, *info)
 
 
 def initialize_parameter(model, param, output_path):
@@ -187,19 +187,19 @@ def train_wgan_gp():
                                  size=(batch_size, z_vec_dim)).astype('float32')
 
             with using_config('enable_backprop', False):
-                x_g = model_gen(z).data
+                x_g = model_gen(z)
 
             y_g = model_cri(x_g)
             y_t = model_cri(x_t)
             loss_c = F.sum(y_g) - F.sum(y_t)
 
             # calculate gradient penalty
-            differences = x_t - x_g
+            differences = x_g.data - x_t
             alpha = xp.random.uniform(low=0., high=1.,
                                       size=((batch_size,) +
                                             (1,) * (differences.ndim - 1))
                                       ).astype('float32')
-            interpolates = Variable(x_t - alpha * differences)
+            interpolates = Variable(x_t + alpha * differences)
 
             gradients = chainer.grad([model_cri(interpolates)],
                                      [interpolates],
@@ -230,7 +230,6 @@ def train_wgan_gp():
         loss_g = -F.sum(y_g) / batch_size
 
         # update Generator
-        model_cri.cleargrads()
         model_gen.cleargrads()
         loss_g.backward()
         optimizer_gen.update()

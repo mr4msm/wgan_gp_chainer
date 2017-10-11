@@ -4,7 +4,7 @@ This is an implementation of [Improved Training of Wasserstein GANs](https://arx
 Chainer v3.0.0rc1, OpenCV, etc.  
 The scripts work on Python 2.7.13.
 
-# How to generate an image
+# How to generate images
 ```
 $ python generate_image.py example_food-101/config.py -p example_food-101/trained-params_gen_update-000040000.npz
 ```
