@@ -3,14 +3,17 @@
 
 import argparse
 import chainer
-import imp
 import numpy as np
 import os
 from chainer import Variable, cuda, serializers, using_config
 from chainer import computational_graph as graph
 from chainer import functions as F
-from batch_generator import ImageBatchGenerator
 from datetime import datetime as dt
+
+from batch_generator import ImageBatchGenerator
+from commons import load_module
+from commons import initialize_model, initialize_optimizer
+from commons import l2_norm
 
 SAVE_PARAMS_FORMAT = 'trained-params_{0}_update-{1:09d}.npz'
 SAVE_STATE_FORMAT = 'optimizer-state_{0}_update-{1:09d}.npz'
@@ -60,41 +63,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def load_module(module_path):
-    """Load Python module."""
-    head, tail = os.path.split(module_path)
-    module_name = os.path.splitext(tail)[0]
-    info = imp.find_module(module_name, [head])
-    return imp.load_module(module_name, *info)
-
-
-def initialize_parameter(model, param, output_path):
-    """Save initial params or load params to resume."""
-    if param is None:
-        serializers.save_npz(output_path, model)
-        print('save ' + output_path)
-    else:
-        ext = os.path.splitext(param)[1]
-
-        if ext == '.npz':
-            load_func = serializers.load_npz
-        elif ext == '.h5':
-            load_func = serializers.load_hdf5
-        else:
-            raise TypeError(
-                'The format of \"{}\" is not supported.'.format(param))
-
-        load_func(param, model)
-        print('load ' + param)
-
-
-def initialize_optimizer(optimizer, state, output_path):
-    """Save initial state or load state to resume."""
-    initialize_parameter(optimizer, state, output_path)
-
-
-def train_wgan_gp():
-    """Train Critic and Generator using Wasserstein GAN with gradient penalty."""
+if __name__ == '__main__':
     # parse arguments
     args = parse_arguments()
     config = load_module(args.config)
@@ -142,11 +111,11 @@ def train_wgan_gp():
     print('lambda for gradient penalty = {}'.format(gp_lambda))
 
     # save or load initial parameters for Critic
-    initialize_parameter(model_cri, args.param_cri,
-                         os.path.join(out_dir, SAVE_PARAMS_FORMAT.format('cri', optimizer_cri.t)))
+    initialize_model(model_cri, args.param_cri,
+                     os.path.join(out_dir, SAVE_PARAMS_FORMAT.format('cri', optimizer_cri.t)))
     # save or load initial parameters for Generator
-    initialize_parameter(model_gen, args.param_gen,
-                         os.path.join(out_dir, SAVE_PARAMS_FORMAT.format('gen', optimizer_gen.t)))
+    initialize_model(model_gen, args.param_gen,
+                     os.path.join(out_dir, SAVE_PARAMS_FORMAT.format('gen', optimizer_gen.t)))
     # save or load initial optimizer state for Critic
     initialize_optimizer(optimizer_cri, args.state_cri,
                          os.path.join(out_dir, SAVE_STATE_FORMAT.format('cri', optimizer_cri.t)))
@@ -204,13 +173,7 @@ def train_wgan_gp():
             gradients = chainer.grad([model_cri(interpolates)],
                                      [interpolates],
                                      enable_double_backprop=True)[0]
-
-            if gradients.data.ndim > 1:
-                slopes = F.sqrt(F.sum(gradients * gradients,
-                                      axis=tuple(range(1, gradients.data.ndim))))
-            else:
-                slopes = gradients
-
+            slopes = l2_norm(gradients)
             gradient_penalty = gp_lambda * F.sum((slopes - 1.) * (slopes - 1.))
 
             loss_c += gradient_penalty
@@ -296,7 +259,3 @@ def train_wgan_gp():
         out_dir, SAVE_STATE_FORMAT.format('cri', optimizer_cri.t))
     serializers.save_npz(output_file_path, optimizer_cri)
     print('save ' + output_file_path)
-
-
-if __name__ == '__main__':
-    train_wgan_gp()
