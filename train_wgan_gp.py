@@ -23,7 +23,7 @@ def parse_arguments():
 
     parser.add_argument(
         'config',
-        help='a configuration file in which networks, optimizers and hyper params are defined (.py)'
+        help='a python module in which networks, optimizers and hyper params are defined'
     )
     parser.add_argument(
         'dataset',
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     # training loop
     while optimizer_gen.t < update_max:
 
-        for _ in range(update_cri_per_gen):
+        for idx in range(update_cri_per_gen):
             x_t = next(batch_generator)
             if gpu_id >= 0:
                 x_t = cuda.to_gpu(x_t, device=gpu_id)
@@ -155,10 +155,13 @@ if __name__ == '__main__':
             z = xp.random.normal(loc=0., scale=1.,
                                  size=(batch_size, z_vec_dim)).astype('float32')
 
-            with using_config('enable_backprop', False):
+            if idx == (update_cri_per_gen - 1):
                 x_g = model_gen(z)
+            else:
+                with using_config('enable_backprop', False):
+                    x_g = model_gen(z)
 
-            y_g = model_cri(x_g)
+            y_g = model_cri(x_g.data)
             y_t = model_cri(x_t)
             loss_cri = F.sum(y_g) - F.sum(y_t)
 
@@ -184,9 +187,6 @@ if __name__ == '__main__':
 
             sum_loss_cri += float(loss_cri.data) / update_cri_per_gen
 
-        z = xp.random.normal(loc=0., scale=1.,
-                             size=(batch_size, z_vec_dim)).astype('float32')
-        x_g = model_gen(z)
         y_g = model_cri(x_g)
         loss_gen = -F.sum(y_g) / batch_size
 
@@ -205,8 +205,8 @@ if __name__ == '__main__':
 
         # output computational graph, if needed
         if args.computational_graph and optimizer_gen.t == (initial_t + 1):
-            with open('graph.dot', 'w') as o:
-                o.write(graph.build_computational_graph((loss_cri, loss_gen)).dump())
+            with open(os.path.join(out_dir, 'graph.dot'), 'w') as f:
+                f.write(graph.build_computational_graph((loss_cri, loss_gen)).dump())
             print('graph generated')
 
         # show mean losses, save interim trained parameters and optimizer states
