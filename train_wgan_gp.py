@@ -5,6 +5,7 @@ import argparse
 import chainer
 import numpy as np
 import os
+import random
 from chainer import Variable, cuda, using_config
 from chainer import computational_graph as graph
 from chainer import functions as F
@@ -57,6 +58,10 @@ def parse_arguments():
         '-S', '--state_gen', default=None,
         help='optimizer state for Generator saved as serialized array (.npz | .h5)'
     )
+    parser.add_argument(
+        '-r', '--random_seed', default=None, type=int,
+        help='random seed used to initialize model weights, shuffle data and so on'
+    )
 
     return parser.parse_args()
 
@@ -82,6 +87,10 @@ if __name__ == '__main__':
     update_cri_per_gen = getattr(config, 'UPDATE_CRI_PER_GEN', 5)
     gp_lambda = getattr(config, 'LAMBDA', 10)
 
+    # set random seed to initialize model weights
+    random.seed(args.random_seed)
+    np.random.seed(args.random_seed)
+
     model_cri = config.Critic()
     optimizer_cri = config.OPTIMIZER_CRI
     optimizer_cri.setup(model_cri)
@@ -91,6 +100,10 @@ if __name__ == '__main__':
     optimizer_gen = config.OPTIMIZER_GEN
     optimizer_gen.setup(model_gen)
     model_opt_set_gen = ModelOptimizerSet(model_gen, optimizer_gen)
+
+    # set random seed to shuffle data
+    random.seed(args.random_seed)
+    np.random.seed(args.random_seed)
 
     # setup batch generator
     with open(args.dataset, 'r') as f:
@@ -129,6 +142,7 @@ if __name__ == '__main__':
         cuda.get_device(gpu_id).use()
         model_gen.to_gpu(device=gpu_id)
         model_cri.to_gpu(device=gpu_id)
+        cuda.cupy.random.seed(args.random_seed)
         xp = cuda.cupy
 
     # set global configuration
@@ -141,6 +155,9 @@ if __name__ == '__main__':
 
     initial_t = optimizer_gen.t
     sum_count = 0
+    sum_y_r = 0.
+    sum_y_g = 0.
+    sum_gp = 0.
     sum_loss_cri = 0.
     sum_loss_gen = 0.
 
@@ -148,9 +165,9 @@ if __name__ == '__main__':
     while optimizer_gen.t < update_max:
 
         for idx in range(update_cri_per_gen):
-            x_t = next(batch_generator)
+            x_r = next(batch_generator)
             if gpu_id >= 0:
-                x_t = cuda.to_gpu(x_t, device=gpu_id)
+                x_r = cuda.to_gpu(x_r, device=gpu_id)
 
             z = xp.random.normal(loc=0., scale=1.,
                                  size=(batch_size, z_vec_dim)).astype('float32')
@@ -161,16 +178,16 @@ if __name__ == '__main__':
                 with using_config('enable_backprop', False):
                     x_g = model_gen(z)
 
-            y_g = model_cri(x_g.data)
-            y_t = model_cri(x_t)
-            loss_cri = F.sum(y_g) - F.sum(y_t)
+            y_r = F.sum(model_cri(x_r))
+            y_g = F.sum(model_cri(x_g.data))
+            loss_cri = y_g - y_r
 
             # calculate gradient penalty
             alpha = xp.random.uniform(low=0., high=1.,
                                       size=((batch_size,) +
-                                            (1,) * (x_t.ndim - 1))
+                                            (1,) * (x_r.ndim - 1))
                                       ).astype('float32')
-            interpolates = Variable((1. - alpha) * x_t + alpha * x_g.data)
+            interpolates = Variable((1. - alpha) * x_r + alpha * x_g.data)
             gradients = chainer.grad([model_cri(interpolates)],
                                      [interpolates],
                                      enable_double_backprop=True)[0]
@@ -185,10 +202,12 @@ if __name__ == '__main__':
             loss_cri.backward()
             optimizer_cri.update()
 
+            sum_y_r -= float(y_r.data) / update_cri_per_gen
+            sum_y_g += float(y_g.data) / update_cri_per_gen
+            sum_gp += float(gradient_penalty.data) / update_cri_per_gen
             sum_loss_cri += float(loss_cri.data) / update_cri_per_gen
 
-        y_g = model_cri(x_g)
-        loss_gen = -F.sum(y_g) / batch_size
+        loss_gen = -F.sum(model_cri(x_g)) / batch_size
 
         # update Generator
         model_gen.cleargrads()
@@ -198,22 +217,34 @@ if __name__ == '__main__':
         sum_loss_gen += float(loss_gen.data)
         sum_count += 1
 
-        # show losses
-        print('{0}: update # {1:09d}: C loss = {2:6.4e}, G loss = {3:6.4e}'.format(
-            str(dt.now()), optimizer_gen.t,
-            float(loss_cri.data), float(loss_gen.data)))
-
         # output computational graph, if needed
         if args.computational_graph and optimizer_gen.t == (initial_t + 1):
             with open(os.path.join(out_dir, 'graph.dot'), 'w') as f:
-                f.write(graph.build_computational_graph((loss_cri, loss_gen)).dump())
+                f.write(graph.build_computational_graph(
+                    (loss_cri, loss_gen)).dump())
             print('graph generated')
+
+        # show losses
+        print('{0}: update # {1:09d}: C loss = {2: 7.4e}, G loss = {3: 7.4e}'.format(
+            str(dt.now()), optimizer_gen.t,
+            float(loss_cri.data), float(loss_gen.data)))
+        print('C loss breakdown: real = {0: 7.4e}, gen = {1: 7.4e}, gp = {2: 7.4e}'.format(
+            float(-y_r.data / batch_size), float(y_g.data / batch_size),
+            float(gradient_penalty.data / batch_size)))
 
         # show mean losses, save interim trained parameters and optimizer states
         if optimizer_gen.t % update_save_params == 0:
-            print('{0}: mean of latest {1:06d} in {2:09d} updates : C loss = {3:7.5e}, G loss = {4:7.5e}'.format(
+            print('{0}: mean of latest {1:06d} in {2:09d} updates : C loss = {3: 7.4e}, G loss = {4: 7.4e}'.format(
                 str(dt.now()), sum_count, optimizer_gen.t, sum_loss_cri / sum_count, sum_loss_gen / sum_count))
+            print('mean of C loss breakdown: real = {0: 7.4e}, gen = {1: 7.4e}, gp = {2: 7.4e}'.format(
+                sum_y_r / (batch_size * sum_count),
+                sum_y_g / (batch_size * sum_count),
+                sum_gp / (batch_size * sum_count)))
+
             sum_count = 0
+            sum_y_r = 0.
+            sum_y_g = 0.
+            sum_gp = 0.
             sum_loss_cri = 0.
             sum_loss_gen = 0.
 
