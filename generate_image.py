@@ -37,7 +37,7 @@ def parse_arguments():
         help='trained parameters saved as serialized array (.npz | .h5)'
     )
     parser.add_argument(
-        '-r', '--random_seed', default=0, type=int,
+        '-r', '--random_seed', default=None, type=int,
         help='random seed to determine z vector in latent space'
     )
 
