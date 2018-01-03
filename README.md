@@ -8,7 +8,7 @@ The scripts work on Python 2.7.13 and 3.6.1.
 ```
 $ python generate_image.py example_food-101/config.py -p example_food-101/trained-params_gen_update-000040000.npz
 ```
-You can generate various images by changing the random_seed option.
+You can generate fixed images by specifying the random_seed option.
 ```
 $ python generate_image.py example_food-101/config.py -r 1 -p example_food-101/trained-params_gen_update-000040000.npz
 ```
